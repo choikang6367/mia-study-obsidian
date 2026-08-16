@@ -1,4 +1,4 @@
-export const MIA_ROUTES = ["dashboard", "progress", "questions", "keywords", "study"] as const;
+export const MIA_ROUTES = ["dashboard", "progress", "questions", "weakness", "keywords", "study"] as const;
 export type MiaRoute = typeof MIA_ROUTES[number];
 export type MiaSessionMode = "recall" | "browse";
 
