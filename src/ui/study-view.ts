@@ -1,15 +1,9 @@
-import { Component, ItemView, MarkdownRenderer, Notice, WorkspaceLeaf } from "obsidian";
+import { Component, ItemView, MarkdownRenderer, Notice, ViewStateResult, WorkspaceLeaf } from "obsidian";
 import { Rating } from "ts-fsrs";
 import type MiaStudyPlugin from "../main";
 import { StudyGrade } from "../core/fsrs-service";
 import { QUESTION_TYPES, KeywordReference, QuestionRecord } from "../core/models";
-import {
-  MiaNavigationHistory,
-  MiaRoute,
-  SwipePoint,
-  TrackpadBackGesture,
-  isBackSwipe,
-} from "../core/navigation";
+import { MiaRoute, MiaSessionMode, parseMiaNavigationState } from "../core/navigation";
 import { calculateProgress } from "../core/progress";
 import { QuestionSort, ReviewFilter, queryQuestions } from "../core/question-query";
 import { buildReviewQueue, recommendQuestions } from "../core/recommendation-engine";
@@ -17,7 +11,6 @@ import { errorMessage } from "./error-message";
 import { bindKeyboardViewport, KeyboardViewportBinding } from "./mobile-keyboard";
 
 export const MIA_VIEW_TYPE = "mia-study-view";
-type SessionMode = "recall" | "browse";
 
 const GRADE_LABELS: Record<StudyGrade, string> = {
   [Rating.Again]: "못 암기",
@@ -41,16 +34,11 @@ function keywordKey(keyword: KeywordReference): string {
 }
 
 export class MiaStudyView extends ItemView {
-  private readonly routeHistory = new MiaNavigationHistory();
-  private readonly trackpadBackGesture = new TrackpadBackGesture();
-  private touchStart: SwipePoint | null = null;
-  private pointerStart: SwipePoint | null = null;
-  private pointerId: number | null = null;
-  private lastSwipeBackAt = Number.NEGATIVE_INFINITY;
+  private route: MiaRoute = "dashboard";
   private queue: string[] = [];
   private queueIndex = 0;
   private answerVisible = false;
-  private sessionMode: SessionMode = "recall";
+  private sessionMode: MiaSessionMode = "recall";
   private lastRated: { id: string; queueIndex: number } | null = null;
   private isMutatingReview = false;
   private questionText = "";
@@ -66,6 +54,7 @@ export class MiaStudyView extends ItemView {
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: MiaStudyPlugin) {
     super(leaf);
+    this.navigation = true;
   }
 
   getViewType(): string { return MIA_VIEW_TYPE; }
@@ -78,7 +67,6 @@ export class MiaStudyView extends ItemView {
       this.plugin.index.subscribe(() => this.render()),
       this.plugin.store.subscribe(() => { if (!this.isMutatingReview) this.render(); }),
     ];
-    this.registerNavigationGestures();
     this.render();
   }
 
@@ -90,11 +78,10 @@ export class MiaStudyView extends ItemView {
   }
 
   showDashboard(): void {
-    this.routeHistory.reset();
-    this.render();
+    this.navigate("dashboard");
   }
 
-  startReview(questionIds?: string[], mode: SessionMode = "recall"): void {
+  startReview(questionIds?: string[], mode: MiaSessionMode = "recall"): void {
     const questions = this.plugin.index.registered;
     const validIds = new Set(questions.map((question) => question.id));
     const requested = questionIds ?? buildReviewQueue(questions, this.plugin.store.reviews, this.plugin.fsrs)
@@ -104,99 +91,36 @@ export class MiaStudyView extends ItemView {
     this.sessionMode = mode;
     this.answerVisible = mode === "browse";
     this.lastRated = null;
-    this.routeHistory.navigate("study");
-    this.render();
+    this.navigate("study");
   }
 
-  private get route(): MiaRoute { return this.routeHistory.current; }
+  getState(): Record<string, unknown> {
+    return {
+      route: this.route,
+      queue: [...this.queue],
+      queueIndex: this.queueIndex,
+      answerVisible: this.answerVisible,
+      sessionMode: this.sessionMode,
+    };
+  }
+
+  async setState(state: unknown, result: ViewStateResult): Promise<void> {
+    const next = parseMiaNavigationState(state);
+    result.history = next.route !== this.route;
+    this.route = next.route;
+    this.queue = next.queue;
+    this.queueIndex = next.queueIndex;
+    this.answerVisible = next.answerVisible;
+    this.sessionMode = next.sessionMode;
+    this.render();
+  }
 
   private navigate(route: MiaRoute): void {
-    this.routeHistory.navigate(route);
-    this.render();
-  }
-
-  private goBack(): void {
-    if (!this.routeHistory.canGoBack) return;
-    this.routeHistory.back();
-    this.render();
-  }
-
-  private registerNavigationGestures(): void {
-    const document = this.contentEl.ownerDocument;
-    this.registerDomEvent(document, "touchstart", (event: TouchEvent) => {
-      if (!this.canStartSwipe(event.target) || event.touches.length !== 1) {
-        this.touchStart = null;
-        return;
-      }
-      const touch = event.touches.item(0);
-      this.touchStart = touch ? { x: touch.clientX, y: touch.clientY, at: event.timeStamp } : null;
-    }, { capture: true, passive: true });
-    this.registerDomEvent(document, "touchend", (event: TouchEvent) => {
-      const start = this.touchStart;
-      this.touchStart = null;
-      const touch = event.changedTouches.item(0);
-      if (!start || !touch) return;
-      this.finishSwipe(start, { x: touch.clientX, y: touch.clientY, at: event.timeStamp }, event);
-    }, { capture: true, passive: false });
-    this.registerDomEvent(document, "touchcancel", () => { this.touchStart = null; }, { capture: true });
-    this.registerDomEvent(document, "pointerdown", (event: PointerEvent) => {
-      if (event.pointerType !== "touch" || !event.isPrimary || !this.canStartSwipe(event.target)) {
-        this.pointerStart = null;
-        this.pointerId = null;
-        return;
-      }
-      this.pointerId = event.pointerId;
-      this.pointerStart = { x: event.clientX, y: event.clientY, at: event.timeStamp };
-    }, { capture: true, passive: true });
-    this.registerDomEvent(document, "pointerup", (event: PointerEvent) => {
-      const start = this.pointerId === event.pointerId ? this.pointerStart : null;
-      this.pointerStart = null;
-      this.pointerId = null;
-      if (!start) return;
-      this.finishSwipe(start, { x: event.clientX, y: event.clientY, at: event.timeStamp }, event);
-    }, { capture: true, passive: false });
-    this.registerDomEvent(document, "pointercancel", (event: PointerEvent) => {
-      if (this.pointerId !== event.pointerId) return;
-      this.pointerStart = null;
-      this.pointerId = null;
-    }, { capture: true });
-    this.registerDomEvent(this.contentEl, "wheel", (event: WheelEvent) => {
-      if (!this.routeHistory.canGoBack || this.isGestureBlocked(event.target)) return;
-      if (!this.trackpadBackGesture.update(event.deltaX, event.deltaY, event.timeStamp)) return;
-      event.preventDefault();
-      this.goBack();
-    }, { passive: false });
-    this.registerDomEvent(document, "keydown", (event: KeyboardEvent) => {
-      if (!this.routeHistory.canGoBack || this.isGestureBlocked(event.target)) return;
-      if (this.app.workspace.getActiveViewOfType(MiaStudyView) !== this) return;
-      if (document.querySelector(".modal-container")) return;
-      const shortcut = (event.metaKey && event.key === "[")
-        || (event.altKey && event.key === "ArrowLeft")
-        || event.key === "Escape";
-      if (!shortcut) return;
-      event.preventDefault();
-      this.goBack();
-    }, { capture: true });
-  }
-
-  private canStartSwipe(target: EventTarget | null): boolean {
-    return this.routeHistory.canGoBack
-      && this.app.workspace.getActiveViewOfType(MiaStudyView) === this
-      && target instanceof Node
-      && this.contentEl.contains(target)
-      && !this.isGestureBlocked(target);
-  }
-
-  private finishSwipe(start: SwipePoint, end: SwipePoint, event: Event): void {
-    if (!this.routeHistory.canGoBack || end.at - this.lastSwipeBackAt < 500 || !isBackSwipe(start, end)) return;
-    this.lastSwipeBackAt = end.at;
-    event.preventDefault();
-    this.goBack();
-  }
-
-  private isGestureBlocked(target: EventTarget | null): boolean {
-    return target instanceof Element
-      && target.closest("button, input, textarea, select, option, a, [contenteditable='true']") !== null;
+    void this.leaf.setViewState({
+      type: MIA_VIEW_TYPE,
+      active: true,
+      state: { ...this.getState(), route },
+    });
   }
 
   private render(): void {
@@ -217,11 +141,6 @@ export class MiaStudyView extends ItemView {
   private renderHeader(root: HTMLElement): void {
     const header = root.createDiv({ cls: "mia-header" });
     const title = header.createDiv();
-    if (this.routeHistory.canGoBack) {
-      const back = title.createEl("button", { text: "← 뒤로", cls: "mia-back-button" });
-      back.setAttr("aria-label", "이전 MIA 화면으로 돌아가기");
-      back.addEventListener("click", () => this.goBack());
-    }
     title.createEl("h2", { text: "MIA Study" });
     title.createEl("span", { text: "FSRS-6", cls: "mia-badge" });
     const nav = header.createDiv({ cls: "mia-nav" });
