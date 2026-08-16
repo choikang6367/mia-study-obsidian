@@ -95,3 +95,52 @@ button.mia-progress-stat:hover { border-color: var(--interactive-accent); }
   min-height: 0;
   scroll-padding-bottom: 28px;
 }
+
+@media (max-width: 640px) {
+  .mia-keyboard-modal-container.mia-keyboard-open {
+    box-sizing: border-box;
+    top: var(--mia-viewport-offset-top, 0px) !important;
+    bottom: auto !important;
+    height: var(--mia-visible-viewport-height, 100dvh) !important;
+    max-height: var(--mia-visible-viewport-height, 100dvh) !important;
+    align-items: center;
+    padding: 8px;
+  }
+
+  .mia-keyboard-modal-container.mia-keyboard-open .mia-keyboard-modal {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    width: min(100%, 720px);
+    max-height: calc(var(--mia-visible-viewport-height, 100dvh) - 16px) !important;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  .mia-keyboard-modal .modal-content {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-padding-block: 72px 112px;
+    padding-bottom: max(18px, var(--safe-area-inset-bottom, 0px));
+  }
+
+  .is-phone.is-floating-nav .mia-view.mia-keyboard-open,
+  .is-phone.auto-full-screen .mia-view.mia-keyboard-open,
+  .mia-view.mia-keyboard-open {
+    box-sizing: border-box;
+    height: var(--mia-keyboard-available-height, 100%) !important;
+    max-height: var(--mia-keyboard-available-height, 100%) !important;
+    margin-bottom: 0;
+    padding-bottom: 24px;
+    scroll-padding-bottom: 96px;
+  }
+
+  .mia-keyboard-settings.mia-keyboard-open {
+    box-sizing: border-box;
+    max-height: var(--mia-keyboard-available-height, 100%) !important;
+    overflow-y: auto;
+    scroll-padding-block: 72px 112px;
+    padding-bottom: 24px;
+  }
+}

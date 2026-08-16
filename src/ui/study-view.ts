@@ -14,6 +14,7 @@ import { calculateProgress } from "../core/progress";
 import { QuestionSort, ReviewFilter, queryQuestions } from "../core/question-query";
 import { buildReviewQueue, recommendQuestions } from "../core/recommendation-engine";
 import { errorMessage } from "./error-message";
+import { bindKeyboardViewport, KeyboardViewportBinding } from "./mobile-keyboard";
 
 export const MIA_VIEW_TYPE = "mia-study-view";
 type SessionMode = "recall" | "browse";
@@ -60,6 +61,7 @@ export class MiaStudyView extends ItemView {
   private questionSort: QuestionSort = "review";
   private candidateLimit = 100;
   private renderComponent: Component | null = null;
+  private keyboardViewport: KeyboardViewportBinding | null = null;
   private unsubscribers: Array<() => void> = [];
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: MiaStudyPlugin) {
@@ -71,6 +73,7 @@ export class MiaStudyView extends ItemView {
   getIcon(): string { return "brain-circuit"; }
 
   async onOpen(): Promise<void> {
+    this.keyboardViewport = bindKeyboardViewport(this.contentEl);
     this.unsubscribers = [
       this.plugin.index.subscribe(() => this.render()),
       this.plugin.store.subscribe(() => { if (!this.isMutatingReview) this.render(); }),
@@ -80,6 +83,8 @@ export class MiaStudyView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.keyboardViewport?.destroy();
+    this.keyboardViewport = null;
     this.unsubscribers.forEach((unsubscribe) => unsubscribe());
     this.renderComponent?.unload();
   }

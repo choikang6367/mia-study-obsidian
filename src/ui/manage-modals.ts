@@ -3,6 +3,7 @@ import { keywordReferencesFromInput } from "../core/keyword-path";
 import { ManagedQuestionInput } from "../core/managed-question";
 import { QUESTION_TYPES, QuestionRecord, QuestionType } from "../core/models";
 import { errorMessage } from "./error-message";
+import { KeyboardAwareModal } from "./mobile-keyboard";
 
 export interface ManagedQuestionDraft extends ManagedQuestionInput {
   subject: string;
@@ -52,7 +53,7 @@ function keywordMeanings(
   }));
 }
 
-export class SubjectEditorModal extends Modal {
+export class SubjectEditorModal extends KeyboardAwareModal {
   private value: string;
 
   constructor(
@@ -85,7 +86,7 @@ export class SubjectEditorModal extends Modal {
   onClose(): void { this.contentEl.empty(); }
 }
 
-export class ManagedQuestionModal extends Modal {
+export class ManagedQuestionModal extends KeyboardAwareModal {
   private subject: string;
   private question: string;
   private answer: string;
@@ -181,7 +182,7 @@ export class ManagedQuestionModal extends Modal {
   onClose(): void { this.contentEl.empty(); }
 }
 
-export class KeywordEditorModal extends Modal {
+export class KeywordEditorModal extends KeyboardAwareModal {
   private name: string;
   private meaning: string;
 

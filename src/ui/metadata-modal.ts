@@ -1,10 +1,11 @@
-import { App, Modal, Notice, Setting } from "obsidian";
+import { App, Notice, Setting } from "obsidian";
 import { QUESTION_TYPES, QuestionRecord, QuestionType } from "../core/models";
 import { keywordReferencesFromInput } from "../core/keyword-path";
 import { QuestionMetadataInput } from "../core/question-writer";
 import { errorMessage } from "./error-message";
+import { KeyboardAwareModal } from "./mobile-keyboard";
 
-export class QuestionMetadataModal extends Modal {
+export class QuestionMetadataModal extends KeyboardAwareModal {
   private type: QuestionType;
   private core: string;
   private sub: string;
